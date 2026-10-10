@@ -50,6 +50,9 @@ function install(): void {
       progress('正在截图，按 Esc 取消。');
       const result = await capture(answer, controller.signal, progress);
       assertAlive(controller.signal);
+      // Clipboard writes cannot be cancelled once submitted. Stop intercepting
+      // Escape and stop the screenshot timer before entering that phase.
+      clearTimeout(timer); document.removeEventListener('keydown', cancel, true);
       if (result.parts.length !== 1) {
         show(`图片已生成，超过单张安全尺寸，已分为 ${result.parts.length} 张 PNG。` + result.warnings.join(' '), () => openPreview(result));
       } else {

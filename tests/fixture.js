@@ -29,6 +29,17 @@ const scenes = {
  rich:'<h2>设备控制器与 CPU</h2>'+para(1)+'<div class="card">用户进程<br>↓<br>操作系统 / 设备驱动<br>↓<br><strong>设备控制器</strong><hr>控制寄存器 · 状态寄存器 · 数据寄存器</div>'+formulas+table(15)+code(25)+'<blockquote>保留浏览器真实渲染结果。</blockquote>'+Array.from({length:8},(_,i)=>para(i)).join('')+'<hr><p><strong>回答结束 · END</strong></p>'
 };
 document.querySelector('#answer').innerHTML = scenes[name] || scenes.rich;
+if (name === 'shadow_overlay') {
+  // External extensions can mount a static host with fixed UI inside an open
+  // shadow root. Include a nested root and explicit visible descendant.
+  const overlay = document.createElement('div'); overlay.id = 'shadow-overlay-fixture';
+  const nested = document.createElement('div'); overlay.attachShadow({ mode: 'open' }).append(nested);
+  nested.attachShadow({ mode: 'open' }).innerHTML = '<div style="position:fixed;right:20%;top:35%;z-index:999999;background:magenta;padding:30px"><span style="visibility:visible">外部浮层不应进入长图</span></div>';
+  document.body.append(overlay);
+  const genuine = document.createElement('div'); genuine.id = 'answer-shadow-component';
+  genuine.attachShadow({ mode: 'open' }).innerHTML = '<p>正文 Shadow DOM 组件必须保留。</p>';
+  document.querySelector('#answer').append(genuine);
+}
 if (name.startsWith('renderer_')) {
   const prior = document.querySelector('#turn');
   const turn = document.createElement('div');

@@ -2,6 +2,15 @@ import { intersect } from './geometry';
 import { assertAlive, delay, type Rect } from './shared';
 import { scrollAncestors } from './adapter';
 type Property = { el: HTMLElement; name: string; value: string; priority: string };
+function hasShadowOverlay(root: ShadowRoot): boolean {
+  for (const el of root.querySelectorAll<HTMLElement>('*')) {
+    const style = getComputedStyle(el);
+    if (style.position === 'fixed' || style.position === 'sticky' ||
+      el.matches('[role="tooltip"], [data-radix-popper-content-wrapper]') ||
+      (el.shadowRoot && hasShadowOverlay(el.shadowRoot))) return true;
+  }
+  return false;
+}
 export class PageState {
   readonly ancestors: HTMLElement[];
   private savedScroll: { el: HTMLElement; x: number; y: number }[];
@@ -51,6 +60,13 @@ export class PageState {
     for (const el of document.body.querySelectorAll<HTMLElement>('*')) {
       if (el === this.body || this.body.contains(el) || el.contains(this.body)) continue;
       if (el.matches('[data-native-longshot-ui="notice"]')) continue;
+      if (el.shadowRoot && hasShadowOverlay(el.shadowRoot)) {
+        // Some extensions use a static host and fixed UI in a shadow tree.
+        // Opacity on the unrelated host also covers explicit visibility:visible
+        // descendants without changing layout or touching answer components.
+        if (!this.hidden.has(el)) { this.hide(el); this.set(el, 'opacity', '0'); }
+        continue;
+      }
       const style = getComputedStyle(el);
       if (style.position === 'fixed' || style.position === 'sticky' || el.matches('[role="tooltip"], [data-radix-popper-content-wrapper]')) this.hide(el);
     }

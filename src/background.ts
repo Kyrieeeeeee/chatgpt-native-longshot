@@ -1,6 +1,7 @@
 import { CHANNEL, LIMITS, errorText, type Request, type Reply } from './shared';
 declare const __TEST__: boolean;
-type Session = { tabId: number; job: string; timer: ReturnType<typeof setTimeout>; detached: boolean };
+type Session = { tabId: number; job: string; timer: ReturnType<typeof setTimeout>; detached: boolean;
+  ready: Promise<void>; cancelled: boolean; ending?: Promise<void> };
 type Preview = { owner: number; chunks: { index: number; chunk: string; width: number; height: number }[]; warnings: string[]; bytes: number; expires: number; previewTab?: number };
 let session: Session | undefined;
 const previews = new Map<string, Preview>();
@@ -10,22 +11,34 @@ function allowed(url: string | undefined): boolean {
   return (u.protocol === 'https:' && ['chatgpt.com', 'chat.openai.com'].includes(u.hostname)) ||
     (__TEST__ && u.origin === 'http://127.0.0.1:8799');
 }
-async function end(current: Session): Promise<void> {
-  clearTimeout(current.timer);
-  try {
-    if (!current.detached) await chrome.debugger.detach({ tabId: current.tabId });
-  } catch (e) {
-    // Self-initiated or racing detach can precede onDetach. Already released is
-    // an idempotent cleanup result; every other error remains visible.
-    if (!errorText(e).includes('Debugger is not attached')) throw e;
+function end(current: Session): Promise<void> {
+  current.cancelled = true;
+  if (current.ending) return current.ending;
+  const ending = Promise.resolve().then(async () => {
+    // Navigation can arrive before attach resolves. Keep the session reserved
+    // until attachment has settled and any attached debugger has been released.
+    await current.ready.catch(() => {});
+    try {
+      if (!current.detached) await chrome.debugger.detach({ tabId: current.tabId });
+    } catch (e) {
+      if (!errorText(e).includes('Debugger is not attached')) throw e;
+    }
     current.detached = true;
-  } finally {
+    clearTimeout(current.timer);
     if (session === current) session = undefined;
-  }
+  });
+  current.ending = ending;
+  // A failed detach keeps the reservation and lease, so another capture cannot
+  // steal it. A later end/lease may retry instead of losing the session record.
+  void ending.catch(() => { if (current.ending === ending) current.ending = undefined; });
+  return ending;
 }
 chrome.debugger.onDetach.addListener(source => {
   const current = session;
-  if (current && current.tabId === source.tabId) { current.detached = true; clearTimeout(current.timer); session = undefined; }
+  if (current && current.tabId === source.tabId) {
+    current.detached = true;
+    void end(current).catch(e => console.warn('[Longshot] external detach cleanup', errorText(e)));
+  }
 });
 chrome.tabs.onRemoved.addListener(tabId => {
   for (const [token, p] of previews) if (p.owner === tabId || p.previewTab === tabId) previews.delete(token);
@@ -76,15 +89,22 @@ async function handle(m: Request, sender: chrome.runtime.MessageSender): Promise
   }
   if (m.type === 'begin') {
     if (session) throw new Error('已有截图任务正在进行，请等待或取消。');
-    const current: Session = { tabId, job: m.job, timer: setTimeout(() => {}, 0), detached: true };
+    const current: Session = { tabId, job: m.job, timer: setTimeout(() => {}, 0), detached: true,
+      ready: Promise.resolve(), cancelled: false };
     clearTimeout(current.timer);
     session = current;
-    try {
+    current.ready = Promise.resolve().then(async () => {
+      if (current.cancelled) throw new Error('截图启动已取消。');
       await chrome.debugger.attach({ tabId }, '1.3');
       current.detached = false;
-      current.timer = setTimeout(() => { void end(current).catch(e => console.warn('[Longshot] detach', errorText(e))); }, LIMITS.timeout + 5000);
+    });
+    current.timer = setTimeout(() => { void end(current).catch(e => console.warn('[Longshot] detach', errorText(e))); }, LIMITS.timeout + 5000);
+    try {
+      await current.ready;
+      if (current.cancelled) { await end(current); throw new Error('页面已切换或截图启动已取消。'); }
       return { ok: true };
-    } catch (e) { if (session === current) session = undefined;
+    } catch (e) {
+      if (current.detached) { clearTimeout(current.timer); if (session === current) session = undefined; }
       throw new Error('无法启动原生截图，请关闭本标签页的开发者工具，并检查调试权限。' + errorText(e)); }
   }
   const current = session;
@@ -93,6 +113,7 @@ async function handle(m: Request, sender: chrome.runtime.MessageSender): Promise
     throw new Error('调试会话已断开，请重新截图。');
   }
   if (m.type === 'end') { await end(current); return { ok: true }; }
+  if (current.cancelled) throw new Error('调试会话正在结束，请重新截图。');
   const tab = await chrome.tabs.get(tabId);
   // Without tabs/host_permissions Chrome omits tab.url. The authenticated
   // sender URL is checked above for every request; active is permission-free.

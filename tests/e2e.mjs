@@ -92,6 +92,8 @@ async function reference(context,url,worker) {
   // Its descendants deliberately override inherited visibility, matching the
   // failure caught by real-site paste inspection.
   await refPage.evaluate(()=>document.querySelectorAll('#composer-fixture *').forEach(el=>el.style.visibility='hidden'));
+  // Independent reference removes only the explicitly unrelated test overlay.
+  await refPage.evaluate(()=>{const overlay=document.querySelector('#shadow-overlay-fixture');if(overlay)overlay.style.opacity='0';});
   // Include Chrome's actual debugger infobar in the reference environment as
   // well. A vh-based ancestor otherwise changes raster phase even with equal
   // target width/height. No emulated metrics or target CSS are changed.
@@ -142,7 +144,7 @@ async function reference(context,url,worker) {
   return output;
 }
 const profiles=[
- {dpr:1,cases:['short','long','headings','lists','quote','code','longcode','math','table','longtable','images','rich','lazy','wide','sticky','sticky_negative','split','renderer_role','renderer_semantic']},
+ {dpr:1,cases:['short','long','headings','lists','quote','code','longcode','math','table','longtable','images','rich','lazy','wide','sticky','sticky_negative','split','renderer_role','renderer_semantic','shadow_overlay']},
  {dpr:2,cases:['short','math','rich']},
  {dpr:1.25,cases:['short','longtable','rich']},
  {dpr:1,zoom:1.25,cases:['short','math','rich']},
@@ -193,6 +195,7 @@ for(const profile of profiles.filter(p=>!process.env.DPRS||process.env.DPRS.spli
     if(scenario.name==='split')assert.match(message,/超过单张安全尺寸/);
     if(scenario.denyClipboard)assert.match(message,/图片生成成功，但复制失败.*权限被拒绝/);
     assert.deepEqual(await scrollSnapshot(page),before,'restore original scroll and styles');
+    if(scenario.name==='shadow_overlay')assert.equal(await page.locator('#shadow-overlay-fixture').getAttribute('style') || '', '', 'restore external shadow host styles');
     await expect.poll(()=>ownsDebugger(worker)).toBe(false);
     let pngs=[];
     if(message.includes('超过单张安全尺寸')||message.includes('图片生成成功，但复制失败')) {

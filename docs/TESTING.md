@@ -1,5 +1,13 @@
 # 验证记录
 
+## 2026-10-11 对抗审查增量回归
+
+`npm run check`：15 项测试、严格类型检查及生产构建通过。新增 10 项异步竞态测试，修复前源码 8 项失败、2 项通过，修复后全部通过。`EXTRA_ONLY=1 DPRS=1 npm run test:e2e` 的 9 项生命周期/边界检查通过；`DPRS=1 CASES=short,split npm run test:e2e` 的 5 项正向截图、分段、复制失败恢复和 125% 缩放检查通过，视觉差异全部为 0。证据分别保存在 `artifacts/results-audit-lifecycle.json`、`artifacts/results-audit-positive.json`。
+
+详见 [对抗审查记录](ADVERSARIAL_REVIEW.md)。以下保留此前验证历史及其未验证边界。
+
+真实 Chrome 粘贴复测又发现 Chat Navigator 的 Shadow DOM 浮层进入长图。修复前夹具出现 96783 个差异像素；修复后 `DPRS=1 CASES=shadow_overlay,rich,renderer_role,sticky_negative npm run test:e2e` 的 9 项检查通过，视觉差异全部为 0，且浮层原样式恢复。真实页面重新加载并复测成功，系统剪贴板粘贴保存的前后图片均为 2153 × 5088，修复后浮层不再重复进入图片；中文、图表和简单数学表达式保留。记录见 `artifacts/results-audit-overlay-before.json`、`artifacts/results-audit-overlay-after.json` 及 `artifacts/real-chatgpt-audit-{before,after}.png`。这次真实站点检查没有独立逐像素参考。
+
 日期：2026-10-10（Asia/Shanghai）。环境：macOS 26.6.2 / arm64，Node 22.22.3，Chrome for Testing 156.0.8078.4，Playwright 1.64.0。
 
 ## 实际执行
