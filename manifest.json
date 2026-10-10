@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT Native Longshot",
+  "version": "0.1.0",
+  "description": "将单条 ChatGPT 回答按网页原始像素复制为 PNG 长图。完全本地处理。",
+  "minimum_chrome_version": "118",
+  "permissions": ["debugger", "clipboardWrite"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [{
+    "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }],
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'" }
+}

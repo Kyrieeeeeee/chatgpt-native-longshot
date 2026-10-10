@@ -1,0 +1,17 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>Native Longshot fixtures</title>
+<link rel="stylesheet" href="/node_modules/katex/dist/katex.min.css">
+<style>
+* { box-sizing:border-box } html { background:#fff; color:#202020 } body { margin:0; font:16px/1.75 Arial,sans-serif; }
+html.dark { background:#080808; color:#d7d7d7 } main { padding:80px 0 120px; } article { max-width:700px; margin:0 auto 45px; }
+[data-message-author-role] { width:100%; display:flow-root } h1,h2,h3 { line-height:1.5; margin:24px 0 12px } p { margin:16px 0 }
+pre { border-radius:12px; background:#e9e9e9; padding:16px; overflow-x:auto; line-height:1.5; font:14px/1.6 monospace; } .dark pre { background:#333; }
+code { font-family:monospace } .key { color:#996ba3 } .num { color:#5a8791 } blockquote { border-left:3px solid #888; margin-left:0; padding-left:16px; color:#888 }
+table { border-collapse:collapse; width:100%; margin:20px 0 } td,th { padding:8px; text-align:left; border-bottom:1px solid #8884; } th { font-weight:600 }
+hr { border:0; border-top:1px solid #8884; margin:24px 0 } img { max-width:100%; display:block } .card { border:1px solid #8884; border-radius:6px; padding:24px; text-align:center }
+header { position:fixed; top:0; height:56px; width:100%; background:#bb2020; color:white; z-index:100 } footer { position:fixed; bottom:0; width:100%; height:70px; background:#229944; z-index:100 }
+html.inner,html.inner body { height:100%; overflow:hidden } html.inner main { height:100vh; overflow-y:auto; }
+html.nested main { height:80vh; margin:10vh 3vw; overflow:auto; border:2px solid #888; } .nested #outer { height:80vh; overflow:auto; }
+.scroll-code { max-height:200px; overflow:auto; } .sticky { position:sticky; top:0; background:#444; color:#fff; padding:8px }
+</style>
+<body><header id="header" hidden>固定导航：不应进入截图</header><div id="outer"><main><article><div data-message-author-role="user">上一条用户提问，不应进入截图。</div></article><article id="turn"><div id="answer" data-message-author-role="assistant"></div><div data-longshot-actions><button>复制文字</button></div></article><article><div data-message-author-role="user">下一条用户提问，不应进入截图。</div></article></main></div><footer id="footer" hidden>输入框：不应进入截图</footer>
+<script src="/node_modules/katex/dist/katex.min.js"></script><script src="/tests/fixture.js"></script></body></html>
