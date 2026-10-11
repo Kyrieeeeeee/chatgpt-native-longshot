@@ -2,5 +2,6 @@
 body { margin:0 } header { display:flex; gap:20px; align-items:center; flex-wrap:wrap; padding:14px 24px; border-bottom:1px solid #8884; }
 main { max-width:1100px; margin:24px auto; padding:0 20px; }
 section { margin:0 0 32px } .actions { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:12px 0 }
+.copy-status { flex-basis:100%; overflow-wrap:anywhere; } .copy-status:empty { display:none; }
 button,a { font:inherit; cursor:pointer } button { padding:6px 12px } a { color:inherit; text-underline-offset:3px }
 img { display:block; max-width:100%; height:auto; } p { color:light-dark(#555,#bbb); } button:focus-visible,a:focus-visible { outline:2px solid currentColor; outline-offset:3px }

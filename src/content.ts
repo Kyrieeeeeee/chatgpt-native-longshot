@@ -23,11 +23,24 @@ function install(): void {
   </style><div class="notice" role="status" aria-live="polite"></div>`;
   const text = shadow.querySelector<HTMLDivElement>('.notice')!;
   let dismiss: ReturnType<typeof setTimeout> | undefined;
+  function setBusy(value: boolean): void {
+    busy = value;
+    for (const host of document.querySelectorAll('[data-native-longshot-ui="button"]')) {
+      const button = host.shadowRoot?.querySelector('button');
+      if (button) button.disabled = value;
+    }
+  }
   function show(message: string, retry?: () => Promise<void>): void {
     clearTimeout(dismiss); delete text.dataset.busy; text.textContent = message;
     if (retry) {
       const open = document.createElement('button'); open.textContent = '打开预览 / 保存 PNG';
-      open.addEventListener('click', () => { open.disabled = true; void retry().then(() => { text.textContent = ''; }, e => { open.disabled = false; show(errorText(e), retry); }); });
+      open.addEventListener('click', () => {
+        if (busy) return;
+        setBusy(true); open.disabled = true; close.disabled = true;
+        text.dataset.busy = 'true'; open.textContent = '正在准备预览…';
+        void retry().then(() => { delete text.dataset.busy; text.textContent = ''; },
+          e => { show('预览打开失败：' + errorText(e), retry); }).finally(() => { setBusy(false); });
+      });
       text.append(document.createElement('br'), open);
       const close = document.createElement('button'); close.textContent = '关闭';
       close.addEventListener('click', () => { text.textContent = ''; }); text.append(close);
@@ -35,8 +48,8 @@ function install(): void {
   }
   document.documentElement.append(notice);
   async function run(answer: Answer, button: HTMLButtonElement): Promise<void> {
-    if (busy) { show('已有截图任务正在进行。'); return; }
-    busy = true; button.disabled = true; button.setAttribute('aria-busy', 'true');
+    if (busy) return;
+    setBusy(true); button.setAttribute('aria-busy', 'true');
     const controller = new AbortController();
     const cancel = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { e.preventDefault(); controller.abort(new DOMException('已取消', 'AbortError')); }
@@ -68,7 +81,7 @@ function install(): void {
       show(controller.signal.aborted && e === controller.signal.reason ? errorText(controller.signal.reason) : '截图失败：' + errorText(e));
     } finally {
       clearTimeout(timer); document.removeEventListener('keydown', cancel, true);
-      busy = false; button.disabled = false; button.removeAttribute('aria-busy'); button.title = '复制长图';
+      setBusy(false); button.removeAttribute('aria-busy'); button.title = '复制长图';
     }
   }
   function bind(answer: Answer): void {
@@ -86,6 +99,7 @@ function install(): void {
       button:disabled { cursor:wait; opacity:.35 } svg { width:18px; height:18px; }
     </style><button type="button" title="复制长图" aria-label="复制这条回答为 PNG 长图"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M9 7h6M9 11h6m-3 3v4m-2-2 2 2 2-2"/></svg></button>`;
     const button = root.querySelector('button')!;
+    button.disabled = busy;
     button.addEventListener('click', () => { void run(answer, button); });
     if (answer.actions) answer.actions.append(host); else answer.body.after(host);
     bound.set(answer.body, host);

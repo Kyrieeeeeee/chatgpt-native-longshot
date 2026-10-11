@@ -1,5 +1,9 @@
 # 验证记录
 
+## 2026-10-11 第二轮体验优化
+
+18 项自动化测试、严格类型检查和构建通过；新增 3 项协调竞态测试在基线 `30dfee9` 全部失败，修复后通过。`npm run test:preview` 在 800px 与 360px 验证行内反馈、单次写入、重试和清除通过（受控剪贴板）；`DPRS=1 CASES=short,split npm run test:e2e` 的 5 项真实扩展回归通过、像素差异全部为 0。明细见 `artifacts/results-experience.json` 与 [审查记录](ADVERSARIAL_REVIEW.md)。
+
 ## 2026-10-11 对抗审查增量回归
 
 `npm run check`：15 项测试、严格类型检查及生产构建通过。新增 10 项异步竞态测试，修复前源码 8 项失败、2 项通过，修复后全部通过。`EXTRA_ONLY=1 DPRS=1 npm run test:e2e` 的 9 项生命周期/边界检查通过；`DPRS=1 CASES=short,split npm run test:e2e` 的 5 项正向截图、分段、复制失败恢复和 125% 缩放检查通过，视觉差异全部为 0。证据分别保存在 `artifacts/results-audit-lifecycle.json`、`artifacts/results-audit-positive.json`。
