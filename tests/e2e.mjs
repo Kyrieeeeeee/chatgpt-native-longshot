@@ -144,7 +144,7 @@ async function reference(context,url,worker) {
   return output;
 }
 const profiles=[
- {dpr:1,cases:['short','long','headings','lists','quote','code','longcode','math','table','longtable','images','rich','lazy','wide','sticky','sticky_negative','split','renderer_role','renderer_semantic','shadow_overlay']},
+ {dpr:1,cases:['short','long','headings','lists','quote','code','longcode','math','table','longtable','images','rich','lazy','wide','sticky','sticky_negative','longsingle','split','renderer_role','renderer_semantic','shadow_overlay']},
  {dpr:2,cases:['short','math','rich']},
  {dpr:1.25,cases:['short','longtable','rich']},
  {dpr:1,zoom:1.25,cases:['short','math','rich']},
@@ -185,6 +185,7 @@ for(const profile of profiles.filter(p=>!process.env.DPRS||process.env.DPRS.spli
     const before=await page.evaluate(()=>window.__longshotClickScroll);
     await expect.poll(()=>notice(page),{timeout:120000}).toMatch(/长图已复制|超过单张安全尺寸|图片生成成功，但复制失败|截图失败|已取消/);
     const message=await notice(page);
+    if(scenario.name==='longsingle')assert.match(message,/长图已复制/);
     assert.ok(!message.startsWith('截图失败'),message);
     const progress=await page.evaluate(()=>window.__longshotProgress);
     assert.ok(progress.some(p=>p.busy && p.text.includes('正在截图')),'immediate capture feedback');

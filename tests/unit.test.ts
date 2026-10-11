@@ -6,7 +6,12 @@ test('intersection excludes outside viewport and ancestor clip', () => {
 });
 test('short output fits one canvas; tall output splits without unsafe allocation', () => {
   assert.equal(planOutput(1600, 6005).count, 1);
-  assert.equal(planOutput(1600, 20000).count, 3);
+  assert.equal(planOutput(1600, 20000).count, 1);
+  assert.equal(planOutput(2153, 58393).count, 1);
+  assert.equal(planOutput(1600, 65535).count, 1);
+  assert.equal(planOutput(1600, 65536).count, 2);
+  assert.equal(planOutput(4096, 31250).count, 1);
+  assert.equal(planOutput(4096, 31251).count, 2);
   assert.throws(() => planOutput(20000, 100));
   assert.throws(() => planOutput(1600, 200000));
   assert.throws(() => planOutput(NaN, 100));

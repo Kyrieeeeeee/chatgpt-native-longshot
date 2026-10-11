@@ -1,8 +1,8 @@
 export const CHANNEL = 'native-longshot-v1';
 export const LIMITS = {
   canvasSide: 16384,
-  partHeight: 8192,
-  canvasPixels: 24_000_000,
+  partHeight: 65535,
+  canvasPixels: 128_000_000,
   totalPixels: 192_000_000,
   pngBytes: 64 * 1024 * 1024,
   parts: 16,

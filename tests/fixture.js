@@ -23,7 +23,8 @@ const scenes = {
  math:formulas, table:table(4), longtable:table(80), images:image+para(1)+image,
  lazy:para(0)+Array.from({length:15},(_,i)=>para(i)).join('')+image.replace('<img','<img loading="lazy"')+para(99),
  wide:'<div style="overflow-x:auto"><table style="width:1300px"><tr><td>横向隐藏内容边界</td><td>只捕获当前可见区域</td></tr></table></div>'+`<pre class="scroll-code">${'内部纵向滚动边界\n'.repeat(60)}</pre>`,
- split:Array.from({length:145},(_,i)=>para(i)).join(''),
+ longsingle:Array.from({length:145},(_,i)=>para(i)).join(''),
+ split:Array.from({length:950},(_,i)=>para(i)).join(''),
  sticky:'<div style="border:1px solid #888"><div class="sticky">代码块标题（只应出现一次）</div>'+code(80)+'</div>',
  sticky_negative:'<div style="border:1px solid #888"><div class="sticky" style="top:-85px;transform:translateY(84px);margin-bottom:84px">负偏移吸顶标题（只应出现一次）</div>'+code(80)+'</div>',
  rich:'<h2>设备控制器与 CPU</h2>'+para(1)+'<div class="card">用户进程<br>↓<br>操作系统 / 设备驱动<br>↓<br><strong>设备控制器</strong><hr>控制寄存器 · 状态寄存器 · 数据寄存器</div>'+formulas+table(15)+code(25)+'<blockquote>保留浏览器真实渲染结果。</blockquote>'+Array.from({length:8},(_,i)=>para(i)).join('')+'<hr><p><strong>回答结束 · END</strong></p>'
