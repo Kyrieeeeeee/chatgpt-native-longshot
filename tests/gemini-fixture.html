@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/vendor/quill.css"><style>body{background:#17191f;color:#eee;font:16px/1.6 system-ui;margin:40px}.input-area{position:fixed;bottom:60px;left:15%;width:70%;background:#282a2c;padding:20px;border-radius:24px}.ql-editor p{margin:0}.ql-editor{min-height:80px;outline:none;white-space:pre-wrap}button{font:inherit}</style></head><body><main><h1>Gemini composer fixture</h1><div contenteditable="true" id="unrelated">其他编辑区</div></main><div class="input-area"><rich-textarea><div id="composer"></div></rich-textarea><button class="send-button" aria-label="发送消息"><span>发送</span></button><button class="stop-button" aria-label="停止回答">停止</button></div><script src="/vendor/quill.js"></script><script>
+let quill,editor;window.sentTexts=[];
+const key='gemini-fixture-draft:'+location.pathname;
+const send=()=>{quill.update('user');window.sentTexts.push(quill.getText().slice(0,-1));};
+function init(saved){
+ quill=new Quill('#composer',{modules:{toolbar:false,history:{delay:0},keyboard:{bindings:{send:{key:'Enter',shiftKey:false,handler:()=>{send();return false;}}}}}});
+ editor=quill.root;editor.setAttribute('aria-label','输入提示');editor.removeAttribute('role');
+ if(typeof saved==='string')quill.clipboard.dangerouslyPasteHTML(saved,'silent');else if(saved)quill.setContents(saved,'silent');
+ quill.on('text-change',()=>sessionStorage.setItem(key,editor.innerHTML));
+}
+init(sessionStorage.getItem(key));
+document.querySelector('.send-button').onclick=send;
+window.rebuildEditor=()=>{const saved=quill.getContents();document.querySelector('#composer').outerHTML='<div id="composer"></div>';init(saved);};
+</script></body></html>

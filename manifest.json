@@ -1,15 +1,65 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT Native Longshot",
-  "version": "0.1.0",
-  "description": "将单条 ChatGPT 回答按网页原始像素复制为 PNG 长图。完全本地处理。",
+  "version": "0.2.5",
+  "description": "ChatGPT 原像素长图与公式复制；ChatGPT / Gemini 共享提示词管理、/ 搜索与胶囊插入。完全本地处理。",
   "minimum_chrome_version": "118",
-  "permissions": ["debugger", "clipboardWrite"],
-  "background": { "service_worker": "background.js", "type": "module" },
-  "content_scripts": [{
-    "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
-    "js": ["content.js"],
-    "run_at": "document_idle"
-  }],
-  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'" }
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": [
+    "debugger",
+    "clipboardWrite",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "commands": {
+    "cycle-thinking-effort": {
+      "suggested_key": {
+        "default": "Alt+Shift+Y",
+        "mac": "Alt+Shift+Y"
+      },
+      "description": "循环切换 ChatGPT 思考强度"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://gemini.google.com/*"
+      ],
+      "js": [
+        "gemini.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    },
+    "default_popup": "popup.html",
+    "default_title": "Native Longshot 设置"
+  }
 }

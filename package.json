@@ -1,6 +1,6 @@
 {
   "name": "chatgpt-native-longshot",
-  "version": "0.1.0",
+  "version": "0.2.5",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,9 +10,18 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "test:e2e": "node tests/e2e.mjs",
     "test:preview": "node tests/preview-ui.mjs",
+    "test:thinking": "node tests/thinking-ui.mjs",
     "test:large": "node tests/large-output.mjs",
     "check": "npm run typecheck && npm test && npm run build",
-    "package": "npm run build && node scripts/package.mjs"
+    "package": "npm run build && node scripts/package.mjs",
+    "test:productivity": "node tests/productivity-ui.mjs",
+    "test:settings": "node tests/settings-ui.mjs",
+    "test:timeline": "node tests/timeline-ui.mjs",
+    "test:performance": "node tests/performance-regressions.mjs && node tests/token-performance.mjs && node tests/ui-performance.mjs && node tests/performance.mjs --assert",
+    "test:tokens": "node tests/tokens-ui.mjs",
+    "test:gemini": "node tests/gemini-ui.mjs",
+    "test:thinking-audit": "node tests/thinking-adversarial.mjs && node tests/thinking-interaction.mjs",
+    "bench:thinking": "node tests/thinking-benchmark.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
@@ -22,6 +31,7 @@
     "esbuild": "^0.28.2",
     "katex": "^0.19.0",
     "pngjs": "^7.0.0",
+    "quill": "^2.0.3",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

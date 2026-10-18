@@ -13,6 +13,9 @@ try {
       const stitcher = new LongshotStitcher.Stitcher(width, height);
       const tile = document.createElement('canvas'); tile.width = width; tile.height = 512;
       const ctx = tile.getContext('2d');
+      const create=document.createElement.bind(document),read=FileReader.prototype.readAsDataURL,outputs=[];
+      document.createElement=(...args)=>{const el=create(...args);if(args[0]==='canvas')outputs.push(el);return el;};
+      FileReader.prototype.readAsDataURL=function(blob){if(outputs.some(c=>c.width&&c.height))throw new Error('Raw output canvas retained during base64 conversion');return read.call(this,blob);};
       try {
         for (let top = 0; top < height; top += tile.height) {
           const rows = Math.min(tile.height, height - top);
@@ -48,7 +51,7 @@ try {
           } finally { image.close(); }
         }
         return { width, height: top, parts: parts.map(p => ({ width: p.width, height: p.height })) };
-      } finally { stitcher.dispose(); tile.width = 0; tile.height = 0; }
+      } finally { stitcher.dispose(); tile.width = 0; tile.height = 0;document.createElement=create;FileReader.prototype.readAsDataURL=read; }
     }, { width, height });
     assert.equal(result.height, height); assert.equal(result.parts.length, expectedParts);
     console.log('PASS PNG roundtrip, every row at both edges:', JSON.stringify(result));

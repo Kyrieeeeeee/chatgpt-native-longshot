@@ -1,7 +1,8 @@
 import { planOutput } from './geometry';
 import { LIMITS, type OutputPart } from './shared';
+import { decodeBase64 } from './base64';
 export async function bitmap(data: string): Promise<ImageBitmap> {
-  const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0));
+  const bytes = decodeBase64(data);
   return createImageBitmap(new Blob([bytes], { type: 'image/png' }));
 }
 export async function dataUrl(blob: Blob): Promise<string> {
@@ -47,13 +48,16 @@ export class Stitcher {
   }
   private async flush(): Promise<void> {
     const canvas = this.canvas!;
+    const width=canvas.width,height=canvas.height;
     const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(
       b => b ? resolve(b) : reject(new Error('PNG 编码失败，可能已超过浏览器内存限制。')), 'image/png'));
-    this.bytes += blob.size;
-    if (this.bytes > LIMITS.pngBytes) throw new Error('PNG 总大小超过 64 MiB 安全预算，请缩短回答。');
-    this.parts.push({ data: await dataUrl(blob), width: canvas.width, height: canvas.height });
+    // PNG bytes are independent now. Release raw pixels before allocating the
+    // base64 string, not after FileReader finishes.
     canvas.width = 0; canvas.height = 0;
     this.canvas = null; this.context = null;
+    this.bytes += blob.size;
+    if (this.bytes > LIMITS.pngBytes) throw new Error('PNG 总大小超过 64 MiB 安全预算，请缩短回答。');
+    this.parts.push({ data: await dataUrl(blob), width, height });
   }
   finish(): OutputPart[] {
     if (this.written !== this.height) throw new Error('正文尚未完整捕获。');

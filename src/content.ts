@@ -1,8 +1,13 @@
+import {DEFAULT_SETTINGS,readSettings,SETTINGS_KEY} from './settings';
+import {installLayout} from './layout';
+import { installPrompts } from './prompts';
+import { installLatexCopy } from './latex';
 import { answers, type Answer } from './adapter';
 import { capture } from './capture';
 import { copyPng } from './clipboard';
 import { openPreview } from './transport';
 import { LIMITS, errorText, assertAlive } from './shared';
+import { installThinkingShortcut } from './thinking';
 const flag = '__nativeLongshotInstalled';
 const globals = globalThis as typeof globalThis & { [flag]?: boolean };
 if (!globals[flag]) { globals[flag] = true; install(); }
@@ -24,7 +29,7 @@ function install(): void {
   const text = shadow.querySelector<HTMLDivElement>('.notice')!;
   let dismiss: ReturnType<typeof setTimeout> | undefined;
   function setBusy(value: boolean): void {
-    busy = value;
+    busy = value;document.documentElement.toggleAttribute('data-native-longshot-busy',value);
     for (const host of document.querySelectorAll('[data-native-longshot-ui="button"]')) {
       const button = host.shadowRoot?.querySelector('button');
       if (button) button.disabled = value;
@@ -47,8 +52,25 @@ function install(): void {
     } else dismiss = setTimeout(() => { if (!busy) text.textContent = ''; }, 6500);
   }
   document.documentElement.append(notice);
+  const thinking = installThinkingShortcut(show, () => busy);
+  const prompts=installPrompts(show, () => busy);
+  let settings={...DEFAULT_SETTINGS};
+  const latex=installLatexCopy(show, () => busy);
+  const layout=installLayout(()=>busy);
+  const applySettings=(value:unknown)=>{
+    settings=readSettings(value);latex.setEnabled(settings.latex);prompts.setEnabled(settings.prompts);layout.apply(settings);
+    if(!settings.latex){const host=document.querySelector<HTMLElement>('[data-native-longshot-ui="latex"]');if(host)host.hidden=true;}
+  };
+  let settingsRevision=0;
+  void chrome.storage.local.get(SETTINGS_KEY).then(data=>{if(!settingsRevision)applySettings(data[SETTINGS_KEY]);}).catch(e=>show('设置读取失败：'+errorText(e)));
+  chrome.runtime.onMessage.addListener((message,_sender,respond)=>{
+    if(message?.type==='native-longshot-settings'){settingsRevision++;applySettings(message.settings);respond({ok:true});}
+    if(message?.type==='native-longshot-open-timeline'){layout.openTimeline();respond({ok:settings.timeline});}
+    if(message?.type==='native-longshot-reset-timeline'){layout.resetTimeline();respond({ok:true});}
+    if(message?.type==='native-longshot-open-prompts'){if(settings.prompts){prompts.open();respond({ok:true});}else respond({ok:false});}
+  });
   async function run(answer: Answer, button: HTMLButtonElement): Promise<void> {
-    if (busy) return;
+    if (busy || thinking.isBusy()) return;
     setBusy(true); button.setAttribute('aria-busy', 'true');
     const controller = new AbortController();
     const cancel = (e: KeyboardEvent) => {

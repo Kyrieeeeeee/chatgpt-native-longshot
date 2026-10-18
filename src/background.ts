@@ -5,6 +5,14 @@ type Session = { tabId: number; job: string; timer: ReturnType<typeof setTimeout
 type Preview = { owner: number; chunks: { index: number; chunk: string; width: number; height: number }[]; warnings: string[]; bytes: number; expires: number; previewTab?: number };
 let session: Session | undefined;
 const previews = new Map<string, Preview>();
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command !== 'cycle-thinking-effort') return;
+  void (async () => {
+    const target = tab ?? (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+    if (target?.id !== undefined)
+      await chrome.tabs.sendMessage(target.id, { type: 'native-longshot-cycle-thinking' }, { frameId: 0 });
+  })().catch(() => { /* Other sites and tabs awaiting refresh have no receiver. */ });
+});
 function allowed(url: string | undefined): boolean {
   if (!url) return false;
   const u = new URL(url);
@@ -52,6 +60,17 @@ chrome.tabs.onUpdated.addListener((tabId, change) => {
 });
 async function handle(m: Request, sender: chrome.runtime.MessageSender): Promise<Reply> {
   for (const [token, p] of previews) if (p.expires < Date.now()) previews.delete(token);
+  if (m.type === 'preview-release') {
+    const p = previews.get(m.token);
+    // A release is only accepted from this token's actual top-level preview.
+    // Missing buffers are an idempotent no-op (normal completion already takes
+    // the final chunk). Never let another preview or a ChatGPT tab release it.
+    if (sender.frameId !== 0 || sender.url !== chrome.runtime.getURL('preview.html') + '#' + m.token ||
+      sender.tab?.id === undefined || (p && sender.tab.id !== p.previewTab))
+      throw new Error('不允许释放此预览。');
+    previews.delete(m.token);
+    return { ok: true };
+  }
   if (m.type === 'take') {
     const p = previews.get(m.token);
     if (!p || sender.url !== chrome.runtime.getURL('preview.html') + '#' + m.token || sender.tab?.id !== p.previewTab)
@@ -132,6 +151,7 @@ async function handle(m: Request, sender: chrome.runtime.MessageSender): Promise
   return { ok: true, data: response.data };
 }
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  if(message&&typeof message==='object'&&'type' in message&&message.type==='native-longshot-tab-id'&&sender.frameId===0&&(allowed(sender.url)||sender.url?.startsWith('https://gemini.google.com/'))){sendResponse({tabId:sender.tab?.id});return false;}
   if (!message || typeof message !== 'object' || !('channel' in message) || message.channel !== CHANNEL) return false;
   void handle(message as Request, sender).then(sendResponse, e => sendResponse({ ok: false, error: errorText(e) }));
   return true;

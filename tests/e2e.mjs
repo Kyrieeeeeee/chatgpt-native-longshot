@@ -158,6 +158,10 @@ for(const profile of profiles.filter(p=>!process.env.DPRS||process.env.DPRS.spli
     args:['--window-size=1100,900',`--force-device-scale-factor=${profile.dpr}`,`--disable-extensions-except=${path.resolve('dist-test')}`,`--load-extension=${path.resolve('dist-test')}`]});
   await context.grantPermissions(['clipboard-read','clipboard-write'],{origin:'http://127.0.0.1:8799'});
   const worker=context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
+  if(process.env.WITH_PRODUCTIVITY==='1')await worker.evaluate(()=>chrome.storage.local.set({
+    'nativeLongshot.settings.v1':{timeline:true,timelineStyle:'compact',timelineSmooth:false},
+    'nativeLongshot.prompts.v1':Array.from({length:1000},(_,i)=>({id:String(i),name:`性能提示词 ${i}`,content:`插入内容 ${i}`,tags:['性能']}))
+  }));
   const page=context.pages()[0] || await context.newPage();
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   const scenarios=[...profile.cases.map(name=>({name,inner:0,dark:name==='rich'?1:0})),
@@ -231,6 +235,33 @@ for(const profile of profiles.filter(p=>!process.env.DPRS||process.env.DPRS.spli
       assert.equal(metrics.pixels,0,`native pixel mismatch: ${metrics.pixels}, mean ${metrics.mean}, max ${metrics.max}`);
     }
     if(scenario.name==='wide')assert.match(message,/横向|独立纵向/);
+    if(process.env.WITH_PRODUCTIVITY==='1'&&scenario.name==='short'&&!scenario.denyClipboard&&!profile.zoom){
+      await expect(page.locator('.list .row')).toHaveCount(0);
+      await page.evaluate(()=>{const form=document.createElement('form');form.style.cssText='position:fixed;bottom:0;left:0';form.innerHTML='<textarea id="prompt-textarea"></textarea>';document.body.append(form);});
+      await page.locator('#prompt-textarea').fill('原有草稿 ');
+      await page.getByRole('button',{name:'提示词',exact:true}).click();
+      await page.locator('.search').fill('性能提示词 999');await expect(page.locator('.list .row')).toHaveCount(1);
+      await page.getByRole('button',{name:'使用提示词：性能提示词 999',exact:true}).click();
+      await expect(page.locator('#prompt-textarea')).toHaveValue('原有草稿 插入内容 999');
+      await page.getByRole('button',{name:'打开时间线列表',exact:true}).click();
+      await expect(page.locator('.timeline-row')).toHaveCount(2);await page.locator('.row-jump').first().click();
+      await expect(page.locator('.timeline-row')).toHaveCount(0);
+      const memory=await context.newCDPSession(page);await memory.send('Performance.enable');
+      const sample=async()=>{await memory.send('HeapProfiler.collectGarbage');const {metrics}=await memory.send('Performance.getMetrics');return {heap:metrics.find(m=>m.name==='JSHeapUsedSize').value,...await memory.send('Memory.getDOMCounters')};};
+      const samples=[await sample()];
+      for(let repeat=0;repeat<3;repeat++){
+        await page.locator('[data-native-longshot-ui="button"] button').first().scrollIntoViewIfNeeded();
+        await page.locator('[data-native-longshot-ui="button"] button').first().click();
+        await expect.poll(()=>notice(page),{timeout:15000}).toContain('长图已复制');
+        const repeated=PNG.sync.read(Buffer.from((await rawClipboard(page)).split(',')[1],'base64'));
+        assert.equal(diff(repeated,output).pixels,0,'repeat after prompt insert and timeline jump');
+        await expect.poll(()=>ownsDebugger(worker)).toBe(false);
+        samples.push(await sample());
+      }
+      await memory.detach();records.push({label:'productivity-repeat-resources',passed:true,samples});
+      await expect(page.locator('#prompt-textarea')).toHaveValue('原有草稿 插入内容 999');
+      console.log('PASS productivity integration: 1000 prompts, insert, timeline jump, 3 repeated captures with unchanged pixels/draft');
+    }
     records.push({label,passed:true,message,width:output.width,height:output.height,parts:pngs.length,milliseconds:Date.now()-started,pixels:metrics?.pixels,mean:metrics?.mean,max:metrics?.max});
     console.log('PASS',label,output.width,output.height,metrics?.pixels??'no full reference');
    } catch(e) {

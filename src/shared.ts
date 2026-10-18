@@ -18,6 +18,7 @@ export type Request =
   | { channel: typeof CHANNEL; type: 'preview-start'; warnings: string[] }
   | { channel: typeof CHANNEL; type: 'preview-chunk'; token: string; index: number; chunk: string; width: number; height: number }
   | { channel: typeof CHANNEL; type: 'preview-open'; token: string }
+  | { channel: typeof CHANNEL; type: 'preview-release'; token: string }
   | { channel: typeof CHANNEL; type: 'take'; token: string; index?: number };
 export function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

@@ -1,18 +1,29 @@
 import { CHANNEL, type OutputPart } from './shared';
 import { rpc } from './transport';
-import { copyPng, pngBlob } from './clipboard';
+import { copyPngBlob, pngBlob } from './clipboard';
 import { errorText } from './shared';
 const status = document.querySelector<HTMLElement>('#status')!;
 const results = document.querySelector<HTMLElement>('#results')!;
 const urls: string[] = [];
 const parts: OutputPart[] = [];
 let generation = 0;
-function clear(): void { generation++; for (const url of urls) URL.revokeObjectURL(url); urls.length = 0; parts.length = 0; results.replaceChildren(); }
+const token = location.hash.slice(1);
+let released = false;
+function clear(): void {
+  generation++;
+  if (!released) {
+    released = true;
+    // Best effort: clearing must remain immediate if the SW has gone away.
+    // Existing expiry/tab-removal cleanup still covers a lost pagehide message.
+    void rpc({ channel: CHANNEL, type: 'preview-release', token }).catch(() => {});
+  }
+  for (const url of urls) URL.revokeObjectURL(url);
+  urls.length = 0; parts.length = 0; results.replaceChildren();
+}
 document.querySelector('#close')!.addEventListener('click', () => { clear(); status.textContent = '图片已清除。'; });
 window.addEventListener('pagehide', clear);
 async function load(): Promise<void> {
   const loading = generation;
-  const token = location.hash.slice(1);
   const meta = await rpc({ channel: CHANNEL, type: 'take', token });
   if (loading !== generation) return;
   const { warnings, count } = JSON.parse(meta.data!) as { warnings: string[]; count: number };
@@ -27,6 +38,10 @@ async function load(): Promise<void> {
   const copyButtons: HTMLButtonElement[] = [];
   let copying = false;
   for (const [i, part] of parts.entries()) {
+    const blob=pngBlob(part);
+    // The same Blob backs preview/save/copy; no retained base64 duplicate or
+    // second decode on every clipboard retry.
+    part.data='';
     const section = document.createElement('section');
     const actions = document.createElement('div'); actions.className = 'actions';
     const label = document.createElement('span'); label.textContent = `${parts.length > 1 ? `第 ${i + 1} 张 · ` : ''}${part.width} × ${part.height} 像素`;
@@ -45,13 +60,13 @@ async function load(): Promise<void> {
       copying = true;
       for (const button of copyButtons) button.disabled = true;
       report(`正在复制第 ${i + 1} 张图片到剪贴板…`);
-      void copyPng(part).then(() => report(`第 ${i + 1} 张图片已复制。`),
+      void copyPngBlob(blob).then(() => report(`第 ${i + 1} 张图片已复制。`),
         e => report(`第 ${i + 1} 张图片复制失败：` + errorText(e))).finally(() => {
         copying = false;
         if (loading === generation) for (const button of copyButtons) button.disabled = false;
       });
     });
-    const url = URL.createObjectURL(pngBlob(part)); urls.push(url);
+    const url = URL.createObjectURL(blob); urls.push(url);
     const save = document.createElement('a'); save.textContent = '保存 PNG'; save.href = url;
     save.setAttribute('aria-label', `保存第 ${i + 1} 张图片为 PNG`);
     save.download = `chatgpt-answer${parts.length > 1 ? `-${i + 1}` : ''}.png`;

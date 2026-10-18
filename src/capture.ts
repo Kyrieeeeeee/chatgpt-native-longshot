@@ -36,8 +36,10 @@ export async function capture(answer: Answer, signal: AbortSignal, status: (s: s
     while (!total || cursor < total) {
       state.check();
       if (isGenerating(answer)) throw new Error('回答重新开始生成，截图已停止。');
-      if (cursor) await state.moveTo(cursor / scale, scale);
-      await state.settle();
+      const justVerified = cursor ? await state.moveTo(cursor / scale, scale) : undefined;
+      // No intervening await/task: re-read and validate moveTo's stable snapshot
+      // instead of polling the same unchanged layout for another 150ms.
+      await state.settle(justVerified);
       state.hideInterference();
       const before = answer.body.getBoundingClientRect();
       if (state.revision !== revision || Math.abs(before.width - reference.width) > 0.1 || Math.abs(before.height - reference.height) > 0.1)

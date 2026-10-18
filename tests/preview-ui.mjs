@@ -16,6 +16,7 @@ try {
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.setContent(html);
     await page.evaluate(() => {
+      const decode=window.atob;window.__decodes=0;window.atob=(...args)=>{window.__decodes++;return decode(...args);};
       const canvas = document.createElement('canvas'); canvas.width = 800; canvas.height = 8192;
       const data = canvas.toDataURL('image/png');
       window.__writes = [];
@@ -27,6 +28,7 @@ try {
     await page.addScriptTag({ content: source.outputFiles[0].text });
     await expect(page.locator('img')).toHaveCount(2);
     await page.locator('img').evaluateAll(images => Promise.all(images.map(img => img.decode())));
+    assert.equal(await page.evaluate(()=>window.__decodes),2,'decode each PNG only once');
     const buttons = page.locator('.actions button'); const feedback = page.locator('.copy-status').nth(1);
     await expect(buttons.nth(1)).toHaveAccessibleName(/第 2 张/);
     await expect(page.locator('.actions a').nth(1)).toHaveAccessibleName(/第 2 张/);
@@ -44,7 +46,31 @@ try {
     await buttons.nth(1).click(); await page.locator('#close').click();
     await page.evaluate(() => window.__writes[2].resolve());
     await expect(page.locator('#status')).toHaveText('图片已清除。'); await expect(page.locator('img')).toHaveCount(0);
+    assert.equal(await page.evaluate(()=>window.__decodes),2,'copy/retry reuse the preview Blob');
     assert.deepEqual(errors, []); console.log(`PASS preview feedback/concurrency/retry/clear at ${width}px`);
     await page.close();
   }
+ // Cancel while a chunk is in flight; late replies must not recreate images.
+  for (const mode of ['clear','pagehide','error']) {
+    const page=await browser.newPage();await page.setContent(html);
+    await page.evaluate(()=>{
+      window.__messages=[];
+      window.chrome={runtime:{sendMessage:m=>{__messages.push(m);if(m.type==='preview-release')return Promise.resolve({ok:true});
+        if(m.index===undefined)return Promise.resolve({ok:true,data:JSON.stringify({warnings:[],count:3})});
+        return new Promise(resolve=>window.__chunk=resolve);
+      }}};
+    });
+    await page.addScriptTag({content:source.outputFiles[0].text});
+    await expect.poll(()=>page.evaluate(()=>typeof __chunk)).toBe('function');
+    if(mode==='clear')await page.locator('#close').click();
+    else if(mode==='pagehide')await page.evaluate(()=>window.dispatchEvent(new Event('pagehide')));
+    await page.evaluate(()=>__chunk({ok:false,error:'late/cancelled chunk'}));
+    await expect.poll(()=>page.evaluate(()=>__messages.filter(m=>m.type==='preview-release').length)).toBe(1);
+    await expect(page.locator('img')).toHaveCount(0);
+    assert.equal(await page.evaluate(()=>__messages.filter(m=>m.type==='take').length),2,'no next chunk after cancel/error');
+    await page.evaluate(()=>window.dispatchEvent(new Event('pagehide')));
+    assert.equal(await page.evaluate(()=>__messages.filter(m=>m.type==='preview-release').length),1,'release once');
+    await page.close();
+  }
+  console.log('PASS preview in-flight clear/pagehide/error releases buffer once and ignores late replies');
 } finally { await browser.close(); }

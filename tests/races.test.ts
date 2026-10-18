@@ -22,11 +22,13 @@ async function code(name: string, plugins: Plugin[] = []) {
   const result = await build({ ...source, plugins, bundle: true, write: false, format: 'iife', platform: 'browser', define: { __TEST__: 'false' } });
   return result.outputFiles[0]!.text;
 }
-type Reply = { ok: boolean; error?: string; data?: string };
+type Reply = { ok: boolean; error?: string; data?: string; tabId?: number };
 async function background() {
-  let listener!: (message: object, sender: object, reply: (value: Reply) => void) => void;
+  let listener!: (message: object, sender: object, reply: (value: Reply) => void) => boolean | void;
   let navigation!: (id: number, change: object) => void;
   let detached!: (source: object) => void;
+  let command!: (name: string, tab?: { id: number }) => void;
+  const forwarded: { id: number; message: object; options: object }[] = [];
   const timers = new Map<number, () => void>(); let nextTimer = 0;
   const state = { attached: false, attachGate: undefined as ReturnType<typeof deferred<void>> | undefined,
     detachGate: undefined as ReturnType<typeof deferred<void>> | undefined, detachError: false, attachError: false, detaches: 0 };
@@ -34,8 +36,10 @@ async function background() {
     setTimeout: (fn: () => void) => { const id = ++nextTimer; timers.set(id, fn); return id; },
     clearTimeout: (id: number) => { timers.delete(id); },
     chrome: {
+      commands: { onCommand: { addListener: (fn: typeof command) => { command = fn; } } },
       runtime: { onMessage: { addListener: (fn: typeof listener) => { listener = fn; } }, getURL: (p: string) => `chrome-extension://test/${p}` },
-      tabs: { onRemoved: { addListener() {} }, onUpdated: { addListener: (fn: typeof navigation) => { navigation = fn; } }, get: async () => ({ active: true }) },
+      tabs: { onRemoved: { addListener() {} }, onUpdated: { addListener: (fn: typeof navigation) => { navigation = fn; } }, get: async () => ({ active: true }),
+        query: async () => [{ id: 7 }], sendMessage: async (id: number, message: object, options: object) => { forwarded.push({ id, message, options }); } },
       debugger: { onDetach: { addListener: (fn: typeof detached) => { detached = fn; } },
         attach: async () => { if (state.attachGate) await state.attachGate.promise; if (state.attachError) throw new Error('attach failed'); state.attached = true; },
         detach: async () => { state.detaches++; if (state.detachGate) await state.detachGate.promise;
@@ -47,8 +51,31 @@ async function background() {
   runInContext(await code('background'), context);
   const send = (type: string, job = 'one') => new Promise<Reply>(resolve => listener(
     { channel: 'native-longshot-v1', type, job }, { frameId: 0, url: 'https://chatgpt.com/c/test', tab: { id: 1 } }, resolve));
-  return { state, timers, send, navigate: () => navigation(1, { status: 'loading' }) };
+  const request = (message: object, sender: object) => new Promise<Reply | undefined>(resolve => { const handled=listener(message,sender,resolve); if(handled===false)resolve(undefined); });
+  return { state, timers, send, request, command, forwarded, navigate: () => navigation(1, { status: 'loading' }) };
 }
+
+test('Gemini may identify its top-frame prompt draft tab but cannot request capture', async () => {
+  const h=await background();
+  const sender={frameId:0,url:'https://gemini.google.com/app/test',tab:{id:9,url:'https://gemini.google.com/app/test'}};
+  assert.equal((await h.request({type:'native-longshot-tab-id'},sender))?.tabId,9);
+  assert.equal(await h.request({type:'native-longshot-tab-id'},{...sender,frameId:2}),undefined);
+  assert.equal(await h.request({type:'native-longshot-tab-id'},{...sender,url:'https://gemini.google.com.evil.example/app/test'}),undefined);
+  assert.equal((await h.request({channel:'native-longshot-v1',type:'begin',job:'gemini'},sender))?.ok,false);
+  assert.equal(h.state.attached,false);
+});
+
+test('thinking command targets the invocation tab or active tab, top frame only', async () => {
+  const h = await background();
+  h.command('unrelated', { id: 3 }); await tick(); assert.equal(h.forwarded.length, 0);
+  h.command('cycle-thinking-effort', { id: 3 }); await tick();
+  h.command('cycle-thinking-effort'); await tick();
+  assert.deepEqual(h.forwarded.map(item => item.id), [3, 7]);
+  for (const item of h.forwarded) {
+    assert.equal(JSON.stringify(item.message), JSON.stringify({ type: 'native-longshot-cycle-thinking' }));
+    assert.equal(JSON.stringify(item.options), JSON.stringify({ frameId: 0 }));
+  }
+});
 
 test('navigation during pending attach releases debugger and rejects an overlapping capture', async () => {
   const h = await background(); const gate = deferred(); h.state.attachGate = gate;
@@ -158,6 +185,7 @@ async function content() {
   const capturing = deferred<{ parts: { data: string; width: number; height: number }[]; warnings: string[] }>();
   const writing = deferred(); const opening = deferred(); let signal!: AbortSignal; let writes = 0; let captures = 0;
   const context = createContext({ console, Error, AbortController, DOMException, Element: UiElement,
+    chrome: { runtime: { onMessage: { addListener() {} } },storage:{local:{get:async()=>({})}} },
     __answers: [{ body, actions }, { body: new UiElement(), actions: otherActions }],
     __capture: (_answer: unknown, value: AbortSignal) => { captures++; signal = value; return capturing.promise; },
     __copy: () => { writes++; return writing.promise; },
@@ -165,19 +193,24 @@ async function content() {
     setTimeout: (fn: () => void, ms: number) => { const id = ++nextTimer; timers.set(id, { fn, ms }); return id; },
     clearTimeout: (id: number) => timers.delete(id),
     MutationObserver: class { observe() {} },
-    document: { body, documentElement: { append: (root: UiElement) => roots.push(root) },
+    document: { body, documentElement: { append: (root: UiElement) => roots.push(root),toggleAttribute(){} },
       querySelectorAll: () => [...actions.children, ...otherActions.children],
       createElement: () => new UiElement(), addEventListener: (type: string, fn: KeyListener) => listeners.set(type, fn),
       removeEventListener: (type: string) => listeners.delete(type) },
   });
   const stubs: Record<string, string> = {
+    './thinking-hotkey': 'export const installThinkingHotkey = () => {};',
+    './thinking': 'export const installThinkingShortcut = () => ({isBusy:()=>false});',
+    './prompts': 'export const installPrompts = () => ({setEnabled(){},open(){}});',
+    './layout': 'export const installLayout = () => ({apply(){}});',
+    './latex': 'export const installLatexCopy = () => ({setEnabled(){}});',
     './adapter': 'export const answers = () => globalThis.__answers;',
     './capture': 'export const capture = (...args) => globalThis.__capture(...args);',
     './clipboard': 'export const copyPng = () => globalThis.__copy();',
     './transport': 'export const openPreview = () => globalThis.__open();',
   };
   await code('content', [{ name: 'deferred-content-io', setup(b) {
-    b.onResolve({ filter: /^\.\/(adapter|capture|clipboard|transport)$/ }, args => ({ path: args.path, namespace: 'test-io' }));
+    b.onResolve({ filter: /^\.\/(adapter|capture|clipboard|transport|thinking-hotkey|thinking|prompts|latex|layout)$/ }, args => ({ path: args.path, namespace: 'test-io' }));
     b.onLoad({ filter: /.*/, namespace: 'test-io' }, args => ({ contents: stubs[args.path]!, loader: 'js' }));
   } }]).then(source => runInContext(source, context));
   (actions.children[0] as UiElement).shadow!.querySelector('button').click(); await tick();

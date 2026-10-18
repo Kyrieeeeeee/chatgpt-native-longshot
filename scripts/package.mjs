@@ -1,5 +1,7 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 await mkdir('release', { recursive: true });
-execFileSync('/usr/bin/zip', ['-r', '-q', '../release/chatgpt-native-longshot-0.1.0.zip', '.'], { cwd: 'dist' });
-console.log('release/chatgpt-native-longshot-0.1.0.zip');
+const { version } = JSON.parse(await readFile('manifest.json', 'utf8'));
+const filename = `chatgpt-native-longshot-${version}.zip`;
+execFileSync('/usr/bin/zip', ['-r', '-q', `../release/${filename}`, '.'], { cwd: 'dist' });
+console.log(`release/${filename}`);

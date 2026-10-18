@@ -1,0 +1,23 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{font:16px system-ui;margin:40px}#prompt-textarea{border:1px solid #888;padding:16px;position:fixed;bottom:80px;left:10%;width:70%;min-height:80px}.katex{display:inline-block;margin:80px}.annotation{display:none}@media(prefers-color-scheme:dark){:root{color-scheme:dark}body{background:#171717;color:#eee}#prompt-textarea{background:#242424;border-color:#444}}</style></head><body>
+<div class="katex"><span class="katex-html">x² + y²</span><math><semantics><annotation encoding="application/x-tex">x^2 + y^2</annotation></semantics></math></div>
+<div id="prompt-textarea" contenteditable="true" role="textbox" aria-label="消息"></div>
+<div data-composer-overlay-floating-ui="true" id="unrelated-overlay"><div data-mention-section-id="tools">其他工具浮层</div></div>
+<script>
+window.sent=0;window.nativeActions=0;
+const editor=document.querySelector('#prompt-textarea');
+function renderNative(){
+ const existing=document.querySelector('#native-commands');
+ if(!/(?:^|\s)\/[^\s/]*$/.test(editor.innerText)){existing?.remove();return;}
+ if(existing)return;
+ const shell=document.createElement('div');shell.id='native-commands';shell.dataset.composerOverlayFloatingUi='true';
+ shell.innerHTML='<div data-mention-section-id="commands"><button data-list-navigation-item="true">反馈 发送有关此聊天的反馈</button><button>学习 学习新知识点</button></div>';
+ document.body.append(shell);
+}
+document.addEventListener('input',e=>{if(e.target===editor)setTimeout(renderNative,0);});
+document.addEventListener('keydown',e=>{
+ const native=document.querySelector('#native-commands');
+ if(e.key==='Escape')native?.remove();
+ if(native&&['ArrowDown','Enter'].includes(e.key))window.nativeActions++;
+ if(e.key==='Enter')window.sent++;
+},true);
+</script></body></html>

@@ -30,17 +30,17 @@ export class PageState {
       this.set(el, 'scroll-snap-type', 'none');
       this.set(el, 'overflow-anchor', 'none');
     }
-    this.observer = new MutationObserver(records => {
-      // The new ChatGPT renderer refreshes its bookkeeping ID while scrolling;
-      // it does not change rendered content. Keep checking all visual attributes.
-      if (records.every(r => r.type === 'attributes' && r.attributeName === 'data-dil-message-id')) return;
-      this.revision++; this.lastChange = performance.now();
-    });
+    this.observer = new MutationObserver(records => this.contentChanged(records));
     this.observer.observe(body, { subtree: true, childList: true, characterData: true, attributes: true });
     for (const img of body.querySelectorAll('img')) {
       this.loading.push({ img, value: img.getAttribute('loading') });
       img.loading = 'eager';
     }
+  }
+  private contentChanged(records: MutationRecord[]): void {
+    // Renderer bookkeeping is not a visual change; all other attributes count.
+    if (!records.length || records.every(r => r.type === 'attributes' && r.attributeName === 'data-dil-message-id')) return;
+    this.revision++; this.lastChange = performance.now();
   }
   set(el: HTMLElement, name: string, value: string): void {
     this.properties.push({ el, name, value: el.style.getPropertyValue(name), priority: el.style.getPropertyPriority(name) });
@@ -51,12 +51,13 @@ export class PageState {
     this.hidden.add(el); this.set(el, 'visibility', 'hidden');
   }
   hideInterference(): void {
-    for (const el of document.querySelectorAll<HTMLElement>('[data-native-longshot-ui="button"]')) this.hide(el);
+    for (const el of document.querySelectorAll<HTMLElement>('[data-native-longshot-ui="button"], [data-native-longshot-ui="latex"], [data-native-longshot-ui="prompt-tokens"], [data-native-longshot-ui="prompts"], [data-native-longshot-ui="timeline"]')) this.hide(el);
     // Current ChatGPT places its composer in a grid overlay with relative
     // positioning, so fixed/sticky detection alone cannot exclude it.
     for (const el of document.querySelectorAll<HTMLElement>(
       '[data-thread-scroll-footer], [data-composer-surface-variant], [data-app-shell-main-titlebar], button[aria-label="滚动到底部"], button[aria-label="Scroll to bottom"]')) this.hide(el);
-    // A single scan during capture only; preserve target components and ancestors.
+    // Re-check styles on every tile: CSSOM changes and hover states need not
+    // produce DOM mutations. Preserve target components and ancestors.
     for (const el of document.body.querySelectorAll<HTMLElement>('*')) {
       if (el === this.body || this.body.contains(el) || el.contains(this.body)) continue;
       if (el.matches('[data-native-longshot-ui="notice"]')) continue;
@@ -125,20 +126,28 @@ export class PageState {
     }
     return rect;
   }
-  async settle(): Promise<void> {
+  async settle(justVerified?: string): Promise<string> {
     let previous = ''; let equal = 0;
     for (let i = 0; i < 100; i++) {
       this.check();
+      // A caller may change DOM in the same task, before observer delivery.
+      this.contentChanged(this.observer.takeRecords());
       const r = this.body.getBoundingClientRect();
       const current = JSON.stringify([r.x, r.y, r.width, r.height, this.revision, ...this.ancestors.map(el => [el.scrollTop, el.scrollLeft])]);
+      // Only capture's immediate continuation after moveTo supplies this token.
+      // No persistent cache: all other callers do the full stability check.
+      if (current === justVerified) return current;
       equal = current === previous ? equal + 1 : 0;
-      if (equal >= 3 && performance.now() - this.lastChange > 200) return;
+      if (equal >= 3 && performance.now() - this.lastChange > 200) {
+        return current;
+      }
       previous = current;
       await delay(50, this.signal);
     }
     throw new Error('回答的布局持续变化，请等生成、图片和动画结束后再截图。');
   }
-  async moveTo(offset: number, scale = devicePixelRatio): Promise<void> {
+  async moveTo(offset: number, scale = devicePixelRatio): Promise<string | undefined> {
+    let verified: string | undefined;
     // Distribute movement over every scrollable ancestor, from inner to outer.
     // Read actual positions after scroll clamping; never assume requested = actual.
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -153,9 +162,10 @@ export class PageState {
         const actual = el.scrollTop - before;
         moved += actual; delta -= actual;
       }
-      await this.settle();
+      verified = await this.settle();
       if (Math.abs(moved) < 0.1) break;
     }
+    return verified;
   }
   async mediaReady(): Promise<void> {
     await this.bounded(document.fonts.ready);
